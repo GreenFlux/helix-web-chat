@@ -1,0 +1,47 @@
+# Development files
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Node modules (if any build tools are added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# Extension development
+*.pem
+*.crx
+*.zip
+package/
+
+# User data (don't commit personal settings)
+settings.json
+user-data/
