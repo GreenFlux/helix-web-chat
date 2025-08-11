@@ -45,25 +45,45 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Load settings from storage
-function loadSettings() {
-  chrome.storage.local.get(['pineconeSettings'], (result) => {
-    if (result.pineconeSettings) {
-      settings = { ...settings, ...result.pineconeSettings };
-      
-      // Update UI with loaded settings
-      apiKeyInput.value = settings.apiKey || '';
-      hostUrlInput.value = settings.hostUrl || '';
-      assistantIdInput.value = settings.assistantId || '';
-      darkModeToggle.checked = settings.darkMode || false;
-    }
+async function loadSettings() {
+  try {
+    const storage = new SimpleSecureStorage();
+    const credentials = await storage.getCredentials();
+    
+    // Update settings object
+    settings = { ...settings, ...credentials };
+    
+    // Update UI with loaded settings
+    apiKeyInput.value = settings.apiKey || '';
+    hostUrlInput.value = settings.hostUrl || '';
+    assistantIdInput.value = settings.assistantId || '';
+    darkModeToggle.checked = settings.darkMode || false;
     
     // Update button states
     validateInputs();
-  });
+  } catch (error) {
+    console.error('Failed to load settings:', error);
+    
+    // Try to fallback to old storage format for migration
+    chrome.storage.local.get(['pineconeSettings'], (result) => {
+      if (result.pineconeSettings) {
+        settings = { ...settings, ...result.pineconeSettings };
+        
+        // Update UI with loaded settings
+        apiKeyInput.value = settings.apiKey || '';
+        hostUrlInput.value = settings.hostUrl || '';
+        assistantIdInput.value = settings.assistantId || '';
+        darkModeToggle.checked = settings.darkMode || false;
+      }
+      
+      // Update button states
+      validateInputs();
+    });
+  }
 }
 
 // Save settings to storage
-function saveSettings() {
+async function saveSettings() {
   // Validate inputs before saving
   if (!validateInputs()) return;
   
@@ -73,35 +93,48 @@ function saveSettings() {
   const assistantId = assistantIdInput.value.trim();
   const darkMode = darkModeToggle.checked;
   
-  // Update settings object
-  settings.apiKey = apiKey;
-  settings.hostUrl = hostUrl;
-  settings.assistantId = assistantId;
-  settings.darkMode = darkMode;
-  
-  // Send settings to background script
-  chrome.runtime.sendMessage({
-    action: 'updateSettings',
-    settings: settings
-  }, (response) => {
-    if (response && response.success) {
-      // Show success feedback
-      saveSettingsButton.textContent = 'Saved!';
-      saveSettingsButton.disabled = true;
-      
-      // Reset button after a short delay
-      setTimeout(() => {
-        saveSettingsButton.textContent = 'Save Settings';
-        saveSettingsButton.disabled = false;
-      }, 1500);
-    } else {
-      // Show error feedback
-      saveSettingsButton.textContent = 'Error!';
-      setTimeout(() => {
-        saveSettingsButton.textContent = 'Save Settings';
-      }, 1500);
-    }
-  });
+  try {
+    // Save to secure storage
+    const storage = new SimpleSecureStorage();
+    await storage.saveCredentials(apiKey, hostUrl, assistantId, darkMode);
+    
+    // Update settings object
+    settings.apiKey = apiKey;
+    settings.hostUrl = hostUrl;
+    settings.assistantId = assistantId;
+    settings.darkMode = darkMode;
+    
+    // Send settings to background script
+    chrome.runtime.sendMessage({
+      action: 'updateSettings',
+      settings: settings
+    }, (response) => {
+      if (response && response.success) {
+        // Show success feedback
+        saveSettingsButton.textContent = 'Saved!';
+        saveSettingsButton.disabled = true;
+        
+        // Reset button after a short delay
+        setTimeout(() => {
+          saveSettingsButton.textContent = 'Save Settings';
+          saveSettingsButton.disabled = false;
+        }, 1500);
+      } else {
+        // Show error feedback
+        saveSettingsButton.textContent = 'Error!';
+        setTimeout(() => {
+          saveSettingsButton.textContent = 'Save Settings';
+        }, 1500);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to save credentials:', error);
+    // Show error feedback
+    saveSettingsButton.textContent = 'Error!';
+    setTimeout(() => {
+      saveSettingsButton.textContent = 'Save Settings';
+    }, 1500);
+  }
 }
 
 // Validate form inputs
@@ -195,21 +228,29 @@ function updateConnectionStatus(status, errorMessage) {
 }
 
 // Toggle dark mode
-function toggleDarkMode() {
+async function toggleDarkMode() {
   const isDarkMode = darkModeToggle.checked;
   
   // Update settings
   settings.darkMode = isDarkMode;
   
-  // Send updated settings to background script which will notify content scripts
-  chrome.runtime.sendMessage({
-    action: 'updateSettings',
-    settings: settings
-  }, (response) => {
-    if (response && response.success) {
-      console.log('Dark mode toggled:', isDarkMode);
-    } else {
-      console.error('Failed to toggle dark mode');
-    }
-  });
+  try {
+    // Save to secure storage
+    const storage = new SimpleSecureStorage();
+    await storage.saveCredentials(settings.apiKey, settings.hostUrl, settings.assistantId, isDarkMode);
+    
+    // Send updated settings to background script which will notify content scripts
+    chrome.runtime.sendMessage({
+      action: 'updateSettings',
+      settings: settings
+    }, (response) => {
+      if (response && response.success) {
+        console.log('Dark mode toggled:', isDarkMode);
+      } else {
+        console.error('Failed to toggle dark mode');
+      }
+    });
+  } catch (error) {
+    console.error('Failed to save dark mode setting:', error);
+  }
 }

@@ -1,5 +1,8 @@
 // Pinecone Assistant API communication and background tasks
 
+// Import secure storage for service worker
+importScripts('secure-storage.js');
+
 // Pinecone configuration
 let settings = {
   apiTimeout: 60000, // 60 seconds timeout for API calls
@@ -359,12 +362,20 @@ async function testPineconeConnection(testSettings, sendResponse) {
 }
 
 // Update settings
-function updateSettings(message, sendResponse) {
+async function updateSettings(message, sendResponse) {
   if (message.settings) {
     settings = { ...settings, ...message.settings };
     
-    // Save settings to storage
-    chrome.storage.local.set({ pineconeSettings: settings }, () => {
+    try {
+      // Save settings to secure storage
+      const storage = new SimpleSecureStorage();
+      await storage.saveCredentials(
+        settings.apiKey, 
+        settings.hostUrl, 
+        settings.assistantId, 
+        settings.darkMode
+      );
+      
       // Notify content scripts about updated settings
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
@@ -374,7 +385,10 @@ function updateSettings(message, sendResponse) {
       });
       
       sendResponse({ success: true, settings });
-    });
+    } catch (error) {
+      console.error('Failed to save settings to secure storage:', error);
+      sendResponse({ error: 'Failed to save settings securely' });
+    }
   } else {
     sendResponse({ error: 'No settings provided' });
   }
@@ -470,8 +484,24 @@ Summary:`;
 }
 
 // Load settings from storage on startup
-chrome.storage.local.get(['pineconeSettings'], (result) => {
-  if (result.pineconeSettings) {
-    settings = { ...settings, ...result.pineconeSettings };
+async function loadStartupSettings() {
+  try {
+    const storage = new SimpleSecureStorage();
+    const credentials = await storage.getCredentials();
+    settings = { ...settings, ...credentials };
+    console.log('Loaded encrypted settings on startup');
+  } catch (error) {
+    console.error('Failed to load encrypted settings on startup:', error);
+    
+    // Fallback to old storage format for migration
+    chrome.storage.local.get(['pineconeSettings'], (result) => {
+      if (result.pineconeSettings) {
+        settings = { ...settings, ...result.pineconeSettings };
+        console.log('Loaded legacy settings for migration');
+      }
+    });
   }
-});
+}
+
+// Initialize settings
+loadStartupSettings();
